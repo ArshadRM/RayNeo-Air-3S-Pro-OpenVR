@@ -12,7 +12,7 @@ else()
 endif()
 
 # Expose public SDK headers (helpful even for standalone builds)
-target_include_directories(RayNeoExample PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(RayNeoExample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../include)
 
 # On non-macOS platforms we may need to link libusb manually ------------------
 if (NOT APPLE)
@@ -24,8 +24,10 @@ endif()
 rayneo_deploy_runtime(RayNeoExample)
 
 # RPATH so the executable finds libRayNeoSDK when in same directory
-if (APPLE)
-    set_target_properties(RayNeoExample PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
-else()
-    set_target_properties(RayNeoExample PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+if (RAYNEO_BUILD_SHARED)
+    if (APPLE)
+        set_target_properties(RayNeoExample PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+    else()
+        set_target_properties(RayNeoExample PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+    endif()
 endif()

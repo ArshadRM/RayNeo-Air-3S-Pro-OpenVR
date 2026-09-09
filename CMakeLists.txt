@@ -6,6 +6,7 @@ project(RayNeo VERSION 1.0 LANGUAGES C CXX)
 set(CMAKE_MACOSX_RPATH ON)
 
 # User-facing build toggles ---------------------------------------------------
+option(RAYNEO_BUILD_SHARED "Build RayNeoSDK as a shared library" ON)
 option(RAYNEO_BUILD_OPENVR_DRIVER "Build the OpenVR stub driver" ON)
 option(RAYNEO_BUILD_EXAMPLES "Build example applications" ON)
 
@@ -23,6 +24,11 @@ function(rayneo_deploy_runtime tgt)
     endif()
     if (NOT TARGET RayNeoSDK)
         message(FATAL_ERROR "RayNeoSDK target not found; deploy helper requires it")
+    endif()
+
+    get_target_property(_rayneo_sdk_type RayNeoSDK TYPE)
+    if (NOT _rayneo_sdk_type STREQUAL "SHARED_LIBRARY")
+        return()
     endif()
 
     # Always copy RayNeoSDK shared lib (DLL/.dylib/.so) to the target dir.
@@ -124,20 +130,42 @@ else()
 endif()
 
 # RayNeo C API shared library -------------------------------------------------
-add_library(RayNeoSDK SHARED
+set(_rayneo_sdk_lib_type SHARED)
+if (NOT RAYNEO_BUILD_SHARED)
+    set(_rayneo_sdk_lib_type STATIC)
+endif()
+
+add_library(RayNeoSDK ${_rayneo_sdk_lib_type}
     src/RayneoApi.cpp
 )
+
+add_library(RayNeo::SDK ALIAS RayNeoSDK)
 
 target_include_directories(RayNeoSDK
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+if (RAYNEO_BUILD_SHARED)
+    target_compile_definitions(RayNeoSDK PRIVATE RAYNEO_BUILD)
+else()
+    target_compile_definitions(RayNeoSDK PUBLIC RAYNEO_STATIC_DEFINE)
+endif()
+
 target_link_libraries(RayNeoSDK
     PRIVATE
         RayNeo::LibUsb
         ${RAYNEO_PLATFORM_LIBS}
 )
+
+if (NOT RAYNEO_BUILD_SHARED AND CMAKE_CXX_IMPLICIT_LINK_LIBRARIES)
+    # A pure-C parent target may still link this static library; propagate the
+    # C++ runtime so consumers do not need to switch their final linker driver.
+    target_link_libraries(RayNeoSDK
+        PUBLIC
+            ${CMAKE_CXX_IMPLICIT_LINK_LIBRARIES}
+    )
+endif()
 
 # ----------------------------------------------------------------------------
 # RPATH Setup: ensure executables and the SDK can locate libRayNeoSDK.* when
@@ -151,12 +179,14 @@ else()
     set(_RAYNEO_RPATH "$ORIGIN")
 endif()
 
-set_target_properties(RayNeoSDK PROPERTIES
-    BUILD_RPATH "${_RAYNEO_RPATH}"
-    INSTALL_RPATH "${_RAYNEO_RPATH}"
-)
+if (RAYNEO_BUILD_SHARED)
+    set_target_properties(RayNeoSDK PROPERTIES
+        BUILD_RPATH "${_RAYNEO_RPATH}"
+        INSTALL_RPATH "${_RAYNEO_RPATH}"
+    )
+endif()
 
-if (WIN32)
+if (WIN32 AND RAYNEO_BUILD_SHARED)
     # Deploy libusb alongside the SDK itself (primary location).
     if (RAYNEO_LIBUSB_RUNTIME_PATH)
         add_custom_command(TARGET RayNeoSDK POST_BUILD

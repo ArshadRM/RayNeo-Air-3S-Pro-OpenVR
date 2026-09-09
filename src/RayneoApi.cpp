@@ -1,4 +1,3 @@
-#define RAYNEO_BUILD
 #include "rayneo_api.h"
 
 #include <atomic>

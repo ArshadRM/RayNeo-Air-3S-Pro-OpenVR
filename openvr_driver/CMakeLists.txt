@@ -42,9 +42,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SO
 
 target_include_directories(openvr_stub_driver
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/thirdparties/openvr/headers
-        ${CMAKE_SOURCE_DIR}/openvr_driver
-        ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparties/openvr/headers
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 
 target_compile_features(openvr_stub_driver PRIVATE cxx_std_17)

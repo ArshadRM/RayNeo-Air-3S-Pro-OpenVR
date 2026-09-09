@@ -6,7 +6,9 @@
 
 #pragma once
 
-#ifdef _WIN32
+#if defined(RAYNEO_STATIC_DEFINE)
+ #define RAYNEO_API
+#elif defined(_WIN32)
  #ifdef RAYNEO_BUILD
   #define RAYNEO_API __declspec(dllexport)
  #else

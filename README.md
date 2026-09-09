@@ -46,9 +46,8 @@ Old driver:
 
 ```
 CMakeLists.txt                # Root build script
-include/rayneo/rayneo_api.h   # Public C API header
+include/rayneo_api.h          # Public C API header
 src/RayneoApi.cpp             # Core SDK implementation
-main.cpp                      # Basic client executable
 examples/                     # Example apps
 openvr_driver/                # Optional stub driver
 rayneoSDKHeaders/             # Additional internal headers (not yet fully used) from original SDK
@@ -95,6 +94,28 @@ cmake --build build --target RayNeoSDK --config Release
 ```bash
 cmake -B build -DRAYNEO_BUILD_EXAMPLES=ON -DRAYNEO_BUILD_OPENVR_DRIVER=OFF
 cmake --build build --target RayNeoSDK --config Release
+```
+
+### Static build for parent projects
+
+To consume this repository as a git submodule from another C or CMake project,
+disable the examples/driver and build the SDK statically:
+
+```cmake
+add_subdirectory(extern/RayNeo-Air-3S-Pro-OpenVR)
+
+set_target_properties(RayNeoSDK PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_link_libraries(your_target PRIVATE RayNeo::SDK)
+```
+
+Configure the parent project with:
+
+```bash
+cmake -B build \
+  -DRAYNEO_BUILD_SHARED=OFF \
+  -DRAYNEO_BUILD_EXAMPLES=OFF \
+  -DRAYNEO_BUILD_OPENVR_DRIVER=OFF
 ```
 
 ### Runtime Deployment (Windows)
