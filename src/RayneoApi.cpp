@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdarg>
+#include <limits>
 
 #ifdef __APPLE__
 #include <IOKit/hid/IOHIDManager.h>
@@ -158,6 +159,31 @@ static constexpr uint8_t RAYNEO_GT_NOTIFY_SPATIAL_MODE = 0x08;
 
 static void enqueueEvent(RayneoContext__ *ctx, const RAYNEO_Event &evt);
 
+static uint16_t rayneoReadLeU16(const uint8_t *src)
+{
+    return static_cast<uint16_t>(src[0]) |
+           (static_cast<uint16_t>(src[1]) << 8);
+}
+
+static uint32_t rayneoReadLeU32(const uint8_t *src)
+{
+    return static_cast<uint32_t>(src[0]) |
+           (static_cast<uint32_t>(src[1]) << 8) |
+           (static_cast<uint32_t>(src[2]) << 16) |
+           (static_cast<uint32_t>(src[3]) << 24);
+}
+
+static float rayneoReadLeF32(const uint8_t *src)
+{
+    static_assert(sizeof(float) == sizeof(uint32_t), "RayNeo protocol assumes 32-bit float storage");
+    static_assert(std::numeric_limits<float>::is_iec559, "RayNeo protocol assumes IEEE-754 floats");
+
+    const uint32_t bits = rayneoReadLeU32(src);
+    float value = 0.0f;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 static void processInboundFrame(RayneoContext__ *ctx, const uint8_t *buf, size_t len)
 {
     if (!ctx || !buf || len < 2)
@@ -180,14 +206,14 @@ static void processInboundFrame(RayneoContext__ *ctx, const uint8_t *buf, size_t
     {
         float f = 0.f;
         if (off + 4 <= static_cast<int>(len))
-            std::memcpy(&f, buf + off, 4);
+            f = rayneoReadLeF32(buf + off);
         return f;
     };
     auto rdU32 = [&](int off)
     {
         if (off + 4 > static_cast<int>(len))
             return uint32_t{0};
-        return (uint32_t)buf[off] | ((uint32_t)buf[off + 1] << 8) | ((uint32_t)buf[off + 2] << 16) | ((uint32_t)buf[off + 3] << 24);
+        return rayneoReadLeU32(buf + off);
     };
 
     if (type == RAYNEO_PROTO_ACK_IMU_DATA)
@@ -232,7 +258,7 @@ static void processInboundFrame(RayneoContext__ *ctx, const uint8_t *buf, size_t
         {
             uint32_t v = 0;
             if (need(4))
-                v = (uint32_t)p[off] | ((uint32_t)p[off + 1] << 8) | ((uint32_t)p[off + 2] << 16) | ((uint32_t)p[off + 3] << 24);
+                v = rayneoReadLeU32(p + off);
             off += 4;
             return v;
         };
@@ -240,7 +266,7 @@ static void processInboundFrame(RayneoContext__ *ctx, const uint8_t *buf, size_t
         {
             uint16_t v = 0;
             if (need(2))
-                v = (uint16_t)p[off] | ((uint16_t)p[off + 1] << 8);
+                v = rayneoReadLeU16(p + off);
             off += 2;
             return v;
         };
@@ -256,7 +282,7 @@ static void processInboundFrame(RayneoContext__ *ctx, const uint8_t *buf, size_t
         {
             float f = 0;
             if (need(4))
-                std::memcpy(&f, p + off, 4);
+                f = rayneoReadLeF32(p + off);
             off += 4;
             return f;
         };

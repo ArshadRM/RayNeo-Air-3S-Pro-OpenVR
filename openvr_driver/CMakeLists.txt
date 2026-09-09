@@ -3,16 +3,27 @@ cmake_minimum_required(VERSION 3.10)
 # Simple stub OpenVR driver library
 project(OpenVRStubDriver LANGUAGES CXX)
 
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _RAYNEO_SYSTEM_PROCESSOR)
 
-set(SIZEOF_VOIDP ${CMAKE_SIZEOF_VOID_P})
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(PROCESSOR_ARCH "64")
+if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(RAYNEO_PROCESSOR_BITS "64")
 else()
-    set(PROCESSOR_ARCH "32")
+    set(RAYNEO_PROCESSOR_BITS "32")
 endif()
 
-# Force 64-bit build
-set(PROCESSOR_ARCH "64")
+set(RAYNEO_OPENVR_ARCH_SUFFIX "" CACHE STRING "Override OpenVR output/deploy architecture suffix (for example: 64, 32, arm64)")
+if (RAYNEO_OPENVR_ARCH_SUFFIX STREQUAL "")
+    set(RAYNEO_OPENVR_ARCH_SUFFIX "${RAYNEO_PROCESSOR_BITS}")
+    if (_RAYNEO_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+        set(RAYNEO_OPENVR_ARCH_SUFFIX "64")
+    elseif (_RAYNEO_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(RAYNEO_OPENVR_ARCH_SUFFIX "arm64")
+    elseif (_RAYNEO_SYSTEM_PROCESSOR MATCHES "^(x86|i[3-6]86)$")
+        set(RAYNEO_OPENVR_ARCH_SUFFIX "32")
+    else()
+        message(WARNING "Unrecognized processor '${CMAKE_SYSTEM_PROCESSOR}', falling back to pointer-size suffix '${RAYNEO_PROCESSOR_BITS}'.")
+    endif()
+endif()
 
 if(WIN32)
     set(PLATFORM_NAME "win")
@@ -22,10 +33,16 @@ elseif(APPLE)
     set(PLATFORM_NAME "osx")
 endif()
 
-message("Building for platform: ${PLATFORM_NAME}${PROCESSOR_ARCH}")
+set(RAYNEO_OPENVR_PLATFORM_DIR "${PLATFORM_NAME}${RAYNEO_OPENVR_ARCH_SUFFIX}")
+message("Building for platform: ${RAYNEO_OPENVR_PLATFORM_DIR}")
 
 file(GLOB_RECURSE HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp")
 file(GLOB_RECURSE SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+
+set(RAYNEO_OPENVR_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../thirdparties/openvr/headers")
+if (NOT EXISTS "${RAYNEO_OPENVR_HEADERS_DIR}/openvr_driver.h")
+    message(FATAL_ERROR "OpenVR headers not found at ${RAYNEO_OPENVR_HEADERS_DIR}. Initialize the thirdparty submodule before building the driver.")
+endif()
 
 add_library(openvr_stub_driver SHARED
     ${HEADERS}
@@ -42,9 +59,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SO
 
 target_include_directories(openvr_stub_driver
     PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparties/openvr/headers
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+        ${RAYNEO_OPENVR_HEADERS_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
 )
 
 target_compile_features(openvr_stub_driver PRIVATE cxx_std_17)
@@ -58,15 +75,14 @@ set_target_properties(openvr_stub_driver PROPERTIES OUTPUT_NAME "rayneo")
 
 # Platform-specific output directory (match SteamVR driver folder conventions)
 if (WIN32)
-    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/win64)
+    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/${RAYNEO_OPENVR_PLATFORM_DIR})
 elseif(UNIX AND NOT APPLE)
-    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/linux64)
+    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/${RAYNEO_OPENVR_PLATFORM_DIR})
 elseif(APPLE)
-    # macOS still often uses osx64 naming in SteamVR
-    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/osx64)
+    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/${RAYNEO_OPENVR_PLATFORM_DIR})
 endif()
 if (NOT _DRV_OUT_DIR)
-    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/win64) # fallback
+    set(_DRV_OUT_DIR ${PROJECT_BINARY_DIR}/bin/${RAYNEO_OPENVR_PLATFORM_DIR})
 endif()
 set_target_properties(openvr_stub_driver PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${_DRV_OUT_DIR}
@@ -134,10 +150,10 @@ if (WIN32)
             COMMAND ${CMAKE_COMMAND} -E echo "[deploy] Deploying OpenVR driver to ${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$<TARGET_FILE:openvr_stub_driver>" "${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}/bin/${PLATFORM_NAME}${PROCESSOR_ARCH}/$<TARGET_FILE_NAME:openvr_stub_driver>"
+                    "$<TARGET_FILE:openvr_stub_driver>" "${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}/bin/${RAYNEO_OPENVR_PLATFORM_DIR}/$<TARGET_FILE_NAME:openvr_stub_driver>"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_BINARY_DIR}/driver.vrdrivermanifest" "${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}/driver.vrdrivermanifest"
-            COMMAND ${CMAKE_COMMAND} -E copy -t "${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}/bin/${PLATFORM_NAME}${PROCESSOR_ARCH}/" $<TARGET_RUNTIME_DLLS:openvr_stub_driver>
+                COMMAND ${CMAKE_COMMAND} -E copy -t "${STEAMVR_DRIVERS_DIR}/${DRIVER_NAME}/bin/${RAYNEO_OPENVR_PLATFORM_DIR}/" $<TARGET_RUNTIME_DLLS:openvr_stub_driver>
             COMMAND_EXPAND_LISTS
             COMMAND ${CMAKE_COMMAND} -E echo "[deploy] Done."
             DEPENDS openvr_stub_driver
